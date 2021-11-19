@@ -217,6 +217,36 @@ class JPQRetrieve(TransformerBase) :
         self.index = load_index( index_path, use_cuda=gpu, faiss_gpu_index=0)
         self.max_query_length = max_query_length
 
+    def fit(train_topics, train_qrels):
+        opq_index = self.index
+        vt = faiss.downcast_VectorTransform(opq_index.chain.at(0))            
+        assert isinstance(vt, faiss.LinearTransform)
+        opq_transform = faiss.vector_to_array(vt.A).reshape(vt.d_out, vt.d_in)
+        opq_transform = torch.FloatTensor(opq_transform).to(args.model_device)
+
+        ivf_index = faiss.downcast_index(opq_index.index)
+        invlists = faiss.extract_index_ivf(ivf_index).invlists
+        ls = invlists.list_size(0)
+        pq_codes = faiss.rev_swig_ptr(invlists.get_codes(0), ls * invlists.code_size)
+        pq_codes = pq_codes.reshape(-1, invlists.code_size)
+        pq_codes = torch.LongTensor(pq_codes).to(args.model_device)
+
+        centroid_embeds = faiss.vector_to_array(ivf_index.pq.centroids)
+        centroid_embeds = centroid_embeds.reshape(ivf_index.pq.M, ivf_index.pq.ksub, ivf_index.pq.dsub)
+        coarse_quantizer = faiss.downcast_index(ivf_index.quantizer)
+        coarse_embeds = faiss.vector_to_array(coarse_quantizer.xb)
+        centroid_embeds += coarse_embeds.reshape(ivf_index.pq.M, -1, ivf_index.pq.dsub)
+        faiss.copy_array_to_vector(centroid_embeds.ravel(), ivf_index.pq.centroids)
+        coarse_embeds[:] = 0   
+        faiss.copy_array_to_vector(coarse_embeds.ravel(), coarse_quantizer.xb)
+
+        centroid_embeds = torch.FloatTensor(centroid_embeds).to(args.model_device)
+        centroid_embeds.requires_grad = True
+
+        from jpq.run_train import train
+        train(args, model, pq_codes, centroid_embeds, opq_transform, opq_index)
+
+
     #allows a colbert ranker to be built from a dataset
     # def from_dataset(dataset : Union[str,Dataset], 
     #         variant : str = None, 
