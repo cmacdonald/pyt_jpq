@@ -245,6 +245,16 @@ class JPQRetrieve(TransformerBase) :
         input columns: qid, query
         output columns: qid, docid, docno, score, rank
         """
+        def QueryPreprocessingFn(query, tokenizer, max_query_length):   
+            passage = tokenizer.encode(
+                query.rstrip(),
+                add_special_tokens=True,
+                max_length=max_query_length,
+                truncation=True)
+            passage_len = min(len(passage), max_query_length)
+            # input_id_b = pad_input_ids(passage, max_query_length)
+            return passage, passage_len
+
         rtr = []
         for row in topics.itertuples(): 
             ids, length = QueryPreprocessingFn(row.query, self.tokenizer, max_query_length=self.max_query_length )
@@ -257,7 +267,7 @@ class JPQRetrieve(TransformerBase) :
                 query_embeds = self.model(
                     input_ids=a, 
                     attention_mask=b, 
-                    is_query=True).detach().cpu().numpy()
+                    ).detach().cpu().numpy()
             #search the index
             scores, batch_results = self.index.search(query_embeds, self.topk)
             
