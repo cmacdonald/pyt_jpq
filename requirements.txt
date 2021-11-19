@@ -1,0 +1,2 @@
+python-terrier
+git+https://github.com/jingtaozhan/JPQ.git#egg=jpq
