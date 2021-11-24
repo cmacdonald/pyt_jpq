@@ -46,4 +46,6 @@ jobs:
       env:
         TERRIER_VERSION: ${{ matrix.terrier }}
       run: |
+        wget https://www.dropbox.com/s/xo1hlbgg7yi7s6a/m96.tar.gz?dl=0 -O m96.tar.gz
+        tar -xzvf m96.tar.gz
         pytest -s
