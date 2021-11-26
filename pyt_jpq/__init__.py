@@ -219,6 +219,9 @@ class JPQRetrieve(TransformerBase) :
         self.index = load_index( index_path, use_cuda=gpu, faiss_gpu_index=0)
         self.max_query_length = max_query_length
 
+        with open(pid2offset_path, 'rb') as handle:
+            self.pid2offset = pickle.load(pid2offset, handle, protocol=4)
+
     def fit(train_topics, train_qrels):
         opq_index = self.index
         vt = faiss.downcast_VectorTransform(opq_index.chain.at(0))            
@@ -246,9 +249,15 @@ class JPQRetrieve(TransformerBase) :
         centroid_embeds.requires_grad = True
 
         from jpq.preprocess import write_query_rel
+        args = type('', (), {})()
+        args.data_dir
+        args.threads = 1
+        args.max_query_length
 
+        #write_query_rel(args, self.pid2offset, qid2offset_file, query_file, positive_id_file, out_query_file, standard_qrel_file)
 
         from jpq.run_train import train
+        args = type('', (), {})()
         args.log_dir = tempfile.mkdtemp()
         args.gpu_search = self.gpu
 
