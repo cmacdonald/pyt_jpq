@@ -22,7 +22,12 @@ class TestIndexing(unittest.TestCase):
 
         ret = JPQRetrieve("./index/OPQ96,IVF1,PQ96x8.index", CHECKPOINT, gpu=False)
         res = ret.search("chemical")
-        print(res)
+        self.assertTrue(len(res) > 0)
+
+        ret.fit(
+            pt.get_dataset("vaswani").get_topics(),
+            pt.get_dataset("vaswani").get_qrels()
+        )
 
 
     def setUp(self):

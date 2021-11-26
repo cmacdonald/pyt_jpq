@@ -245,8 +245,14 @@ class JPQRetrieve(TransformerBase) :
         centroid_embeds = torch.FloatTensor(centroid_embeds).to(args.model_device)
         centroid_embeds.requires_grad = True
 
+        from jpq.preprocess import write_query_rel
+
+
         from jpq.run_train import train
-        train(args, model, pq_codes, centroid_embeds, opq_transform, opq_index)
+        args.log_dir = tempfile.mkdtemp()
+        args.gpu_search = self.gpu
+
+        train(args, self.model, pq_codes, centroid_embeds, opq_transform, opq_index)
 
 
     #allows a colbert ranker to be built from a dataset
