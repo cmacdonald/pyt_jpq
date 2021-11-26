@@ -4,6 +4,8 @@ import faiss
 import pyterrier as pt
 import pandas as pd
 assert pt.started()
+from typing import Union
+from pyterrier.dataset import Dataset
 
 from pyterrier.transformer import TransformerBase
 
@@ -248,24 +250,24 @@ class JPQRetrieve(TransformerBase) :
 
 
     #allows a colbert ranker to be built from a dataset
-    # def from_dataset(dataset : Union[str,Dataset], 
-    #         variant : str = None, 
-    #         version='latest',            
-    #         **kwargs):
+    def from_dataset(dataset : Union[str,Dataset], 
+            variant : str = None, 
+            version='latest',            
+            **kwargs):
 
-    #     from pyterrier.batchretrieve import _from_dataset
+        from pyterrier.batchretrieve import _from_dataset
 
-    #     #ANCERetrieval doesnt match quite the expectations, so we can use a wrapper fn
-    #     def _JPQRetrievalconstruct(folder, **kwargs):
-    #         import os
-    #         checkpoint_path = kwargs.get('checkpoint_path')
-    #         del kwargs['checkpoint_path']
-    #         return JPQRetrieval(checkpoint_path, folder, **kwargs)
+        #ANCERetrieval doesnt match quite the expectations, so we can use a wrapper fn
+        def _JPQRetrievalconstruct(folder, **kwargs):
+            import os
+            checkpoint_path = kwargs.get('checkpoint_path')
+            del kwargs['checkpoint_path']
+            return JPQRetrieval(checkpoint_path, folder, **kwargs)
 
-    #     return _from_dataset(dataset, 
-    #                             variant=variant, 
-    #                             version=version, 
-    #                             clz=_JPQRetrievalconstruct, **kwargs)
+        return _from_dataset(dataset, 
+                                variant=variant, 
+                                version=version, 
+                                clz=_JPQRetrievalconstruct, **kwargs)
 
     def __str__(self):
         return "JPQ"
