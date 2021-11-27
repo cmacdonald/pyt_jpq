@@ -17,13 +17,16 @@ indexer = JPQIndexer(
 indexer.index(pt.get_dataset("vaswani").get_corpus_iter())
 ```
 
- - During training, that FAISS index is rewritten.
-
  - During retrieval, a FAISS index can be used to retrieve documents.
 
 ```python
-ret = JPQRetrieve("./index/OPQ96,IVF1,PQ96x8.index", CHECKPOINT)
+ret = JPQRetrieve("./index/", "OPQ96,IVF1,PQ96x8.index", CHECKPOINT)
 res = ret.search("chemical")
+```
+ - During training, that FAISS index is rewritten.
+
+```python
+ret.fit(train_topics, train_qrels)
 ```
 
 ## Known Issues
