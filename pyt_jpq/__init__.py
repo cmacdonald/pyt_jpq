@@ -294,6 +294,10 @@ class JPQRetrieve(TransformerBase) :
             self.pid2offset = pickle.load(handle)
         with open(docno2docid_path, 'rb') as handle:
             self.docno2docid = pickle.load(handle)
+        self.docid2docno = [None] * len(self.docno2docid)
+        for docno, docid in self.docno2docid.items():
+            self.docid2docno[docid] = docno
+
 
     def fit(self, train_topics, train_qrels):
         import faiss
@@ -330,7 +334,6 @@ class JPQRetrieve(TransformerBase) :
             self.docno2docid,
             self.pid2offset, max_query_length=self.max_query_length)
 
-        print(self.faiss_path)
         from jpq.run_train import train
         args = ArgsObject()
         import tempfile, os
@@ -360,6 +363,12 @@ class JPQRetrieve(TransformerBase) :
         args.adam_epsilon = 1e-8
         args.train_batch_size = 32
         train(args, self.model, pq_codes, centroid_embeds, opq_transform, opq_index)
+
+        # now reopen the new faiss index
+        new_index = os.path.join(args.model_save_dir, f'epoch-{args.num_train_epochs}', 
+                os.path.basename(args.init_index_path))
+        from jpq.run_retrieval import load_index
+        self.index = load_index(self.faiss_path, use_cuda=self.gpu, faiss_gpu_index=0)
 
 
     #allows a JPQ ranker to be obained from a dataset
@@ -416,9 +425,9 @@ class JPQRetrieve(TransformerBase) :
             #search the index
             scores, batch_results = self.index.search(query_embeds, self.topk)
             
-
             docid_list=batch_results.tolist()[0]
             df = pd.DataFrame({'qid':str(row.qid),'docid':docid_list})
+            df['docno'] = df.docid.map(lambda docid : self.docid2docno[docid])
             df['score'] = scores[0]
             df['rank'] = [i for i , _ in enumerate(docid_list)]
             rtr.append(df)
