@@ -356,6 +356,7 @@ class JPQRetrieve(TransformerBase) :
         from jpq.run_train import train
         import tempfile, os
         args = ArgsObject()
+        args.log_dir = tempfile.mkdtemp()
         args.model_save_dir = "./newmodel"
         args.model_device = torch.device(f"cuda:0")
         args.model_device = torch.device("cpu")
