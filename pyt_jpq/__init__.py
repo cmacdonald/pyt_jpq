@@ -357,7 +357,7 @@ class JPQRetrieve(TransformerBase) :
         args.model_save_dir = "./newmodel"
         args.model_device = torch.device(f"cuda:0")
         args.model_device = torch.device("cpu")
-        os.makedirs(model_save_dir, exist_ok:True)
+        os.makedirs(args.model_save_dir, exist_ok=True)
         args.init_index_path = self.faiss_path
         args.gpu_search = self.gpu
         args.preprocess_dir = train_preprocess_dir
