@@ -20,10 +20,25 @@ class TestIndexing(unittest.TestCase):
         iter = pt.get_dataset("vaswani").get_corpus_iter()
         indexer.index([ next(iter) for i in range(num_docs) ])
 
-        ret = JPQRetrieve("./index/OPQ96,IVF1,PQ96x8.index", CHECKPOINT, gpu=False)
+        ret = JPQRetrieve("./index/", "OPQ96,IVF1,PQ96x8.index", CHECKPOINT, gpu=False)
         res = ret.search("chemical")
-        print(res)
+        self.assertTrue(len(res) > 0)
+        print("unfitted")
+        print(pt.Utils.evaluate(
+            ret.transform(pt.get_dataset("vaswani").get_topics()),
+            pt.get_dataset("vaswani").get_qrels()
+        ))
 
+        ret.fit(
+            pt.get_dataset("vaswani").get_topics(),
+            pt.get_dataset("vaswani").get_qrels()
+        )
+
+        print("fitted")
+        print(pt.Utils.evaluate(
+            ret.transform(pt.get_dataset("vaswani").get_topics()),
+            pt.get_dataset("vaswani").get_qrels()
+        ))
 
     def setUp(self):
         import pyterrier as pt
