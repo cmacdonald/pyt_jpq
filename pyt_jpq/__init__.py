@@ -9,6 +9,25 @@ from pyterrier.datasets import Dataset
 
 from pyterrier.transformer import TransformerBase
 
+DEFAULT_TRAINING_ARGS = {
+    'n_gpu' : 1,
+    'max_seq_length' : 32,
+    'centroid_lr' : 1e-4,
+    'loss_neg_topK' : 200,
+    'gradient_accumulation_steps' : 1,
+    'num_train_epochs' : 6, # "The number of training epochs is set to 6. In fact, the performance is already quite satisfying after 1 or 2 epochs. Each epoch costs less than 2 hours on our machine."
+    'warmup_steps' : 2000,
+    'logging_steps' : 100,
+    'weight_decay' : 0.01,
+    'lambda_cut' : 10,
+    'centroid_weight_decay' : 0,
+    'threads' : 1,
+    'lr' : 5e-6,
+    'seed' : 42,
+    'max_grad_norm' : 1,
+    'adam_epsilon' : 1e-8,
+    'train_batch_size' : 32
+}
 
 def _preprocess_topicsqrels(topics, qrels, docno2docid, pid2offset, max_query_length=32):
     import tempfile
@@ -249,8 +268,6 @@ class JPQIndexer(TransformerBase):
             index = faiss.index_gpu_to_cpu(index)
         faiss.write_index(index, save_index_path)
 
-
-
         return self.index_path
 
 class ArgsObject:
@@ -299,7 +316,7 @@ class JPQRetrieve(TransformerBase) :
             self.docid2docno[docid] = docno
 
 
-    def fit(self, train_topics, train_qrels):
+    def fit(self, train_topics, train_qrels, **fit_params):
         import faiss
         args = type('', (), {})()
         args.model_device = torch.device("cpu") #torch.cuda.device(0)
@@ -335,33 +352,20 @@ class JPQRetrieve(TransformerBase) :
             self.pid2offset, max_query_length=self.max_query_length)
 
         from jpq.run_train import train
-        args = ArgsObject()
         import tempfile, os
-        args.log_dir = tempfile.mkdtemp()
+        args = ArgsObject()
         args.model_save_dir = "./newmodel"
-        args.n_gpu = 1
         args.model_device = torch.device(f"cuda:0")
         args.model_device = torch.device("cpu")
-        os.makedirs(args.model_save_dir, exist_ok=True)
+        os.makedirs(model_save_dir, exist_ok:True)
         args.init_index_path = self.faiss_path
         args.gpu_search = self.gpu
         args.preprocess_dir = train_preprocess_dir
-        args.max_seq_length = 32
-        args.centroid_lr = 1e-4
-        args.loss_neg_topK = 200
-        args.gradient_accumulation_steps = 1
-        args.num_train_epochs = 6 #The number of training epochs is set to 6. In fact, the performance is already quite satisfying after 1 or 2 epochs. Each epoch costs less than 2 hours on our machine.
-        args.warmup_steps = 2000
-        args.logging_steps = 100
-        args.weight_decay = 0.01
-        args.lambda_cut = 10
-        args.centroid_weight_decay = 0
-        args.threads = 1
-        args.lr = 5e-6
-        args.seed = 42
-        args.max_grad_norm = 1
-        args.adam_epsilon = 1e-8
-        args.train_batch_size = 32
+        train_params = DEFAULT_TRAINING_ARGS.copy()
+        train_params.update(fit_params)
+        for k,v in train_params.items():
+            setattr(args, k, v)
+
         train(args, self.model, pq_codes, centroid_embeds, opq_transform, opq_index)
 
         # now reopen the new faiss index

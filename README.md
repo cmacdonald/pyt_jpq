@@ -31,8 +31,6 @@ ret.fit(train_topics, train_qrels)
 
 ## Known Issues
 
- - training is not yet supported by this plugin. Refer to https://github.com/jingtaozhan/JPQ#training
-
  - indexing into multiple shards is not yet implemented by this plugin.
 
 
