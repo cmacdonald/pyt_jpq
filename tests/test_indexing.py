@@ -14,7 +14,7 @@ class TestIndexing(unittest.TestCase):
         indexer = JPQIndexer(
             CHECKPOINT, 
             "./index", #os.path.dirname(self.test_dir), 
-            num_docs = num_docs,
+            segment_size=500,
             gpu=False)
 
         iter = pt.get_dataset("vaswani").get_corpus_iter()

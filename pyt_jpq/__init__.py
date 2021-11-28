@@ -73,7 +73,7 @@ def _preprocess_topicsqrels(topics, qrels, docno2docid, pid2offset, max_query_le
 
 class JPQIndexer(TransformerBase):
     
-    def __init__(self, checkpoint_path, index_path, text_attr="text", num_docs=1000, segment_size=500_000, gpu=True):
+    def __init__(self, checkpoint_path, index_path, text_attr="text", segment_size=500_000, gpu=True):
         import os
         
         self.index_path = index_path
@@ -81,7 +81,6 @@ class JPQIndexer(TransformerBase):
         self.segment_size = segment_size
         self.text_attr = text_attr
         self.gpu = gpu
-        self.num_docs = num_docs
         
         args = type('', (), {})()
         args.model_dir = checkpoint_path
@@ -117,36 +116,28 @@ class JPQIndexer(TransformerBase):
         from transformers import RobertaConfig
 
 
-
-        def tokenize_to_file(args, iter_dict, output_dir, line_fn, max_length, begin_idx, end_idx):
-            from jpq.star_tokenizer import RobertaTokenizer
+        def tokenize_to_file(args, tokenizer, iter_dict, output_dir, line_fn, max_length, max_docs):
+            
             import numpy as np
             from pyterrier import tqdm
-            tokenizer = RobertaTokenizer.from_pretrained(
-                "roberta-base", do_lower_case = True, cache_dir=None)
             os.makedirs(output_dir, exist_ok=True)
-            data_cnt = end_idx - begin_idx
+           
             ids_array = np.memmap(
                 os.path.join(output_dir, "ids.memmap"),
-                shape=(data_cnt, ), mode='w+', dtype=np.int32)
+                shape=(max_docs, ), mode='w+', dtype=np.int32)
             token_ids_array = np.memmap(
                 os.path.join(output_dir, "token_ids.memmap"),
-                shape=(data_cnt, max_length), mode='w+', dtype=np.int32)
+                shape=(max_docs, max_length), mode='w+', dtype=np.int32)
             token_length_array = np.memmap(
                 os.path.join(output_dir, "lengths.memmap"),
-                shape=(data_cnt, ), mode='w+', dtype=np.int32)
-            pbar = tqdm(total=end_idx-begin_idx, desc=f"Tokenizing")
-            for idx, psg in enumerate(iter_dict):
+                shape=(max_docs, ), mode='w+', dtype=np.int32)
+            for idx, psg in tqdm(enumerate(iter_dict), total=max_docs, desc=f"Tokenizing"):
                 psg['docid'] = idx
                 qid_or_pid, token_ids, length = line_fn(args, psg, tokenizer)
-                write_idx = idx - begin_idx
-                ids_array[write_idx] = qid_or_pid
-                token_ids_array[write_idx, :] = token_ids
-                token_length_array[write_idx] = length
-                pbar.update(1)
-            pbar.close()
-
-            assert write_idx == data_cnt - 1
+                ids_array[idx] = qid_or_pid
+                token_ids_array[idx, :] = token_ids
+                token_length_array[idx] = length
+            return idx
 
         def PassagePreprocessingFn(args, passage : dict, tokenizer):
             from jpq.preprocess import pad_input_ids
@@ -179,22 +170,33 @@ class JPQIndexer(TransformerBase):
                 docno2id[line['docno']] = i
                 yield line
         
+        from jpq.star_tokenizer import RobertaTokenizer
+        tokenizer = RobertaTokenizer.from_pretrained(
+                "roberta-base", do_lower_case = True, cache_dir=None)
+
         #todo chunking
-        tokenize_to_file(args, new_gen(), os.path.join(self.index_path, "memmap"), PassagePreprocessingFn, 512, 0, self.num_docs)
-
+        from more_itertools import chunked
+        splits_dir_lst=[]
+        splits_doc_count=[]
+        for chunk_id, subset in enumerate(chunked(new_gen(), self.segment_size)):
+            target_dir = os.path.join(self.index_path, "memmap_%d" % chunk_id)
+            segment_size = tokenize_to_file(args, tokenizer, subset, target_dir, PassagePreprocessingFn, 512, self.segment_size)
+            splits_dir_lst.append(target_dir)
+            splits_doc_count.append(segment_size)
+        
+        self.num_docs = sum(splits_doc_count)
         out_passage_path = self.index_path
-        all_linecnt = self.num_docs
-
+        
         import numpy as np
         token_ids_array = np.memmap(
             os.path.join(out_passage_path, "passages.memmap"),
-            shape=(all_linecnt, args.max_seq_length), mode='w+', dtype=np.int32)
+            shape=(self.num_docs, args.max_seq_length), mode='w+', dtype=np.int32)
         idx = 0
         pid2offset = {}
         out_line_count = 0
         token_length_array = []
-        splits_dir_lst = [os.path.join(self.index_path, "memmap")]
-        for split_dir in splits_dir_lst:
+        from pyterrier import tqdm
+        for split_dir, split_size in tqdm(zip(splits_dir_lst, splits_doc_count), desc="Merging segments", total=len(splits_doc_count)):
             ids_array = np.memmap(
                 os.path.join(split_dir, "ids.memmap"), mode='r', dtype=np.int32)
             split_token_ids_array = np.memmap(
@@ -202,13 +204,16 @@ class JPQIndexer(TransformerBase):
             split_token_ids_array = split_token_ids_array.reshape(len(ids_array), -1)
             split_token_length_array = np.memmap(
                 os.path.join(split_dir, "lengths.memmap"), mode='r', dtype=np.int32)
-            for p_id, token_ids, length in zip(ids_array, split_token_ids_array, split_token_length_array):
+            for local_pid in range(split_size): #TODO could we do this as a batch copy?
+                #for p_id, token_ids, length in zip(ids_array, split_token_ids_array, split_token_length_array):
+                p_id = ids_array[local_pid]
+                token_ids = split_token_ids_array[local_pid]
+                length = split_token_length_array[local_pid]
+                
                 token_ids_array[idx, :] = token_ids
                 token_length_array.append(length) 
                 pid2offset[p_id] = idx
                 idx += 1
-                if idx < 3:
-                    print(str(idx) + " " + str(p_id))
                 out_line_count += 1
         assert len(token_length_array) == len(token_ids_array) == idx
         np.save(os.path.join(out_passage_path, "passages_length.npy"), np.array(token_length_array))
@@ -224,15 +229,12 @@ class JPQIndexer(TransformerBase):
             "docno2docid.pickle",
         )
 
-
         with open(pid2offset_path, 'wb') as handle:
             pickle.dump(pid2offset, handle, protocol=4)
         
         with open(docno2docid_path, 'wb') as handle:
             pickle.dump(docno2id, handle, protocol=4)
         
-
-        print("done saving pid2offset")
 
         with open(os.path.join(self.index_path, "passages_meta"), 'wt') as metafile:
             import json
