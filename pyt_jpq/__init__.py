@@ -385,6 +385,7 @@ class JPQRetrieve(TransformerBase) :
         import tempfile, os
         args = ArgsObject()
         args.log_dir = tempfile.mkdtemp()
+        print("JPQ training is logging to %s" % args.log_dir)
         args.model_save_dir = "./newmodel" #TODO fix
         args.model_device = torch.device(f"cuda:0") if self.gpu else torch.device("cpu")
         os.makedirs(args.model_save_dir, exist_ok=True)
