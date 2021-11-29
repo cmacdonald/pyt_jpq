@@ -296,7 +296,7 @@ class JPQRetrieve(TransformerBase) :
         from jpq.model import RobertaDot
         from transformers import RobertaConfig
         from jpq.run_retrieval import load_index
-        import os, pickle
+        import os, pickle, json
 
         self.index_path = index_path
         self.gpu = gpu
