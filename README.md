@@ -33,7 +33,6 @@ ret.fit(train_topics, train_qrels)
 
  - easier access, i.e. automatic downloading of existing model checkpoints
  - better use of folders in the index_path
- - record which FAISS index is the latest
 
 
 ## Citations

@@ -236,14 +236,10 @@ class JPQIndexer(TransformerBase):
             pickle.dump(docno2id, handle, protocol=4)
         
 
-        with open(os.path.join(self.index_path, "passages_meta"), 'wt') as metafile:
-            import json
-            metafile.write(json.dumps({'total_number': self.num_docs, 'embedding_size': 512, 'type': 'int32'}))
-
         from jpq.run_init import doc_inference
         doc_inference(model, args, embed_size)
 
-        save_index_path = os.path.join(args.output_dir, f"OPQ{args.subvector_num},IVF1,PQ{args.subvector_num}x8.index")
+        save_index_path =  f"OPQ{args.subvector_num},IVF1,PQ{args.subvector_num}x8.index" 
 
         doc_embeddings = np.memmap(args.doc_embed_path, dtype=np.float32, mode="r")
         doc_embeddings = doc_embeddings.reshape(-1, embed_size)
@@ -268,7 +264,17 @@ class JPQIndexer(TransformerBase):
         index.add(doc_embeddings)
         if self.gpu:
             index = faiss.index_gpu_to_cpu(index)
-        faiss.write_index(index, save_index_path)
+        print("Index is %s" % str(index))
+        faiss.write_index(index, os.path.join(args.output_dir, save_index_path))
+
+        with open(os.path.join(self.index_path, "passages_meta"), 'wt') as metafile:
+            import json
+            metafile.write(json.dumps({
+                'total_number': self.num_docs, 
+                'embedding_size': 512, 
+                'type': 'int32',
+                'current_faiss_index' : save_index_path
+            }))
 
         return self.index_path
 
@@ -276,7 +282,7 @@ class ArgsObject:
     pass
 
 class JPQRetrieve(TransformerBase) :
-    def __init__(self, index_path, faiss_name, model_path__queryencoder_dir, max_query_length=32, batch_size=1, topk=100, gpu=True):
+    def __init__(self, index_path, model_path__queryencoder_dir, max_query_length=32, batch_size=1, topk=100, gpu=True, faiss_name=None):
         from jpq.star_tokenizer import RobertaTokenizer
         from jpq.model import RobertaDot
         from transformers import RobertaConfig
@@ -293,6 +299,11 @@ class JPQRetrieve(TransformerBase) :
         #load the tokeniser
         self.tokenizer = RobertaTokenizer.from_pretrained(
             "roberta-base", do_lower_case = True, cache_dir=None)
+
+        with open(os.path.join(self.index_path, "passages_meta"), 'rt') as metafile:
+            self.meta = json.loads(metafile)
+        if faiss_name is None:
+            faiss_name = self.meta['current_faiss_index']
 
         self.faiss_path = os.path.join(index_path, faiss_name)
         #load the index
@@ -321,7 +332,7 @@ class JPQRetrieve(TransformerBase) :
     def fit(self, train_topics, train_qrels, **fit_params):
         import faiss
         args = type('', (), {})()
-        args.model_device = torch.device("cpu") #torch.cuda.device(0)
+        args.model_device = torch.cuda.device(0) if self.gpu else torch.device("cpu")
 
         opq_index = self.index
         vt = faiss.downcast_VectorTransform(opq_index.chain.at(0))            
@@ -357,9 +368,8 @@ class JPQRetrieve(TransformerBase) :
         import tempfile, os
         args = ArgsObject()
         args.log_dir = tempfile.mkdtemp()
-        args.model_save_dir = "./newmodel"
-        args.model_device = torch.device(f"cuda:0")
-        args.model_device = torch.device("cpu")
+        args.model_save_dir = "./newmodel" #TODO fix
+        args.model_device = torch.device(f"cuda:0") if self.gpu else torch.device("cpu")
         os.makedirs(args.model_save_dir, exist_ok=True)
         args.init_index_path = self.faiss_path
         args.gpu_search = self.gpu
@@ -377,6 +387,9 @@ class JPQRetrieve(TransformerBase) :
         from jpq.run_retrieval import load_index
         self.index = load_index(self.faiss_path, use_cuda=self.gpu, faiss_gpu_index=0)
 
+        #TODO: write new_index to correct folder
+        #TODO: update passages_meta file
+        
 
     #allows a JPQ ranker to be obained from a dataset
     def from_dataset(dataset : Union[str,Dataset], 
