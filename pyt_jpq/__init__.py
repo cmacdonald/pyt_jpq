@@ -30,11 +30,10 @@ DEFAULT_TRAINING_ARGS = {
 }
 
 def _preprocess_topicsqrels(topics, qrels, docno2docid, pid2offset, max_query_length=32):
-    import tempfile
-    from jpq.preprocess import write_query_rel
+    import tempfile, os
     from collections import defaultdict
     from itertools import count
-    import os
+    import pyterrier as pt
 
     train_preprocess_dir = tempfile.mkdtemp()
     args = ArgsObject()
@@ -63,7 +62,9 @@ def _preprocess_topicsqrels(topics, qrels, docno2docid, pid2offset, max_query_le
         from warnings import warn
         warn("Could not match %d qrels to index" % skipped)
 
-    write_query_rel(
+    import jpq.preprocess
+    jpq.preprocess.tqdm = pt.tqdm
+    jpq.preprocess.write_query_rel(
         args, 
         pid2offset, "qid2offset", 
         "train.topics", "train.qrels", # our filenames, these dont matter
