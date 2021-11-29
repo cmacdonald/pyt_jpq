@@ -20,7 +20,7 @@ class TestIndexing(unittest.TestCase):
         iter = pt.get_dataset("vaswani").get_corpus_iter()
         indexer.index([ next(iter) for i in range(num_docs) ])
 
-        ret = JPQRetrieve("./index/", CHECKPOINT, gpu=False)
+        ret = JPQRetrieve("./index/", CHECKPOINT, gpu=False, gpu_search=False)
         res = ret.search("chemical")
         self.assertTrue(len(res) > 0)
         print("unfitted")
