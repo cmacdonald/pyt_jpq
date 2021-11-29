@@ -344,7 +344,7 @@ class JPQRetrieve(TransformerBase) :
     def fit(self, train_topics, train_qrels, **fit_params):
         import faiss
         args = type('', (), {})()
-        args.model_device = torch.cuda.device(0) if self.gpu else torch.device("cpu")
+        args.model_device = torch.device("cuda:0") if self.gpu else torch.device("cpu")
 
         opq_index = self.index
         # starting code assumes its a CPU index
