@@ -311,7 +311,7 @@ class JPQRetrieve(TransformerBase) :
             "roberta-base", do_lower_case = True, cache_dir=None)
 
         with open(os.path.join(self.index_path, "passages_meta"), 'rt') as metafile:
-            self.meta = json.loads(metafile)
+            self.meta = json.load(metafile)
         if faiss_name is None:
             faiss_name = self.meta['current_faiss_index']
 
