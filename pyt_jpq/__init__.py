@@ -302,6 +302,7 @@ class JPQRetrieve(TransformerBase) :
 
         self.index_path = index_path
         self.gpu = gpu
+        self.gpu_search = gpu_search
 
         # load the model 
         config_class, model_class = RobertaConfig, RobertaDot
@@ -380,8 +381,7 @@ class JPQRetrieve(TransformerBase) :
             train_topics, train_qrels, 
             self.docno2docid,
             self.pid2offset, max_query_length=self.max_query_length)
-
-        from jpq.run_train import train
+        
         import tempfile, os
         args = ArgsObject()
         args.log_dir = tempfile.mkdtemp()
@@ -389,20 +389,22 @@ class JPQRetrieve(TransformerBase) :
         args.model_device = torch.device(f"cuda:0") if self.gpu else torch.device("cpu")
         os.makedirs(args.model_save_dir, exist_ok=True)
         args.init_index_path = self.faiss_path
-        args.gpu_search = self.gpu
+        args.gpu_search = self.gpu_search
         args.preprocess_dir = train_preprocess_dir
         train_params = DEFAULT_TRAINING_ARGS.copy()
         train_params.update(fit_params)
         for k,v in train_params.items():
             setattr(args, k, v)
 
-        train(args, self.model, pq_codes, centroid_embeds, opq_transform, opq_index)
+        import jpq.run_train
+        jpq.run_train.tqdm = pt.tqdm
+        jpq.run_train.train(args, self.model, pq_codes, centroid_embeds, opq_transform, opq_index)
 
         # now reopen the new faiss index
         new_index = os.path.join(args.model_save_dir, f'epoch-{args.num_train_epochs}', 
                 os.path.basename(args.init_index_path))
         from jpq.run_retrieval import load_index
-        self.index = load_index(self.faiss_path, use_cuda=self.gpu, faiss_gpu_index=0)
+        self.index = load_index(self.faiss_path, use_cuda=self.gpu_search, faiss_gpu_index=0)
 
         #TODO: write new_index to correct folder
         #TODO: update passages_meta file
@@ -446,6 +448,7 @@ class JPQRetrieve(TransformerBase) :
             # input_id_b = pad_input_ids(passage, max_query_length)
             return passage, passage_len
 
+        model_device = torch.device("cuda:0") if self.gpu else torch.device("cpu")
         rtr = []
         for row in topics.itertuples(): 
             ids, length = QueryPreprocessingFn(row.query, self.tokenizer, max_query_length=self.max_query_length )
@@ -453,8 +456,8 @@ class JPQRetrieve(TransformerBase) :
             # apply the preprocessing. - see https://github.com/jingtaozhan/JPQ/blob/main/preprocess.py#L355
             with torch.no_grad():
                 #get the query_embeds
-                a = torch.tensor([ids])
-                b = torch.ones(1,len(ids))
+                a = torch.tensor([ids]).to(model_device)
+                b = torch.ones(1,len(ids)).to(model_device)
                 query_embeds = self.model(
                     input_ids=a, 
                     attention_mask=b, 
