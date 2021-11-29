@@ -298,6 +298,7 @@ class JPQRetrieve(TransformerBase) :
         from jpq.run_retrieval import load_index
         import os, pickle
 
+        self.index_path = index_path
         self.gpu = gpu
 
         # load the model 
@@ -314,7 +315,7 @@ class JPQRetrieve(TransformerBase) :
         if faiss_name is None:
             faiss_name = self.meta['current_faiss_index']
 
-        self.faiss_path = os.path.join(index_path, faiss_name)
+        self.faiss_path = os.path.join(self.index_path, faiss_name)
         #load the index
         self.index = load_index(self.faiss_path, use_cuda=gpu, faiss_gpu_index=0)
         self.max_query_length = max_query_length
