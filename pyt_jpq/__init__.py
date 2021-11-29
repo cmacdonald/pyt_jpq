@@ -234,6 +234,15 @@ class JPQIndexer(TransformerBase):
         
         with open(docno2docid_path, 'wb') as handle:
             pickle.dump(docno2id, handle, protocol=4)
+
+        # passages_meta is required by TextTokenIdsCache
+        with open(os.path.join(self.index_path, "passages_meta"), 'wt') as metafile:
+            import json
+            metafile.write(json.dumps({
+                'total_number': self.num_docs, 
+                'embedding_size': 512, 
+                'type': 'int32',
+            }))
         
 
         from jpq.run_init import doc_inference
