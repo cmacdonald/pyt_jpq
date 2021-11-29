@@ -345,6 +345,8 @@ class JPQRetrieve(TransformerBase) :
 
 
     def fit(self, train_topics, train_qrels, **fit_params):
+
+        # get the PQ vectors that we are training
         import faiss
         args = type('', (), {})()
         args.model_device = torch.device("cuda:0") if self.gpu else torch.device("cpu")
@@ -377,11 +379,14 @@ class JPQRetrieve(TransformerBase) :
         centroid_embeds = torch.FloatTensor(centroid_embeds).to(args.model_device)
         centroid_embeds.requires_grad = True
 
+        # pre-tokenize the training topics
         train_preprocess_dir = _preprocess_topicsqrels(
             train_topics, train_qrels, 
             self.docno2docid,
             self.pid2offset, max_query_length=self.max_query_length)
         
+
+        # now perform the training
         import tempfile, os
         args = ArgsObject()
         args.log_dir = tempfile.mkdtemp()
