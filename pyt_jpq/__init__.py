@@ -293,7 +293,7 @@ class ArgsObject:
     pass
 
 class JPQRetrieve(TransformerBase) :
-    def __init__(self, index_path, model_path__queryencoder_dir, max_query_length=32, batch_size=1, topk=100, gpu=True, faiss_name=None):
+    def __init__(self, index_path, model_path__queryencoder_dir, max_query_length=32, batch_size=1, topk=100, gpu=True, gpu_search=True, faiss_name=None):
         from jpq.star_tokenizer import RobertaTokenizer
         from jpq.model import RobertaDot
         from transformers import RobertaConfig
@@ -307,6 +307,8 @@ class JPQRetrieve(TransformerBase) :
         config_class, model_class = RobertaConfig, RobertaDot
         config = config_class.from_pretrained(model_path__queryencoder_dir)
         self.model = model_class.from_pretrained(model_path__queryencoder_dir, config=config,)
+        if self.gpu:
+            self.model = self.model.to(torch.device("cuda:0"))
         self.topk = topk
         #load the tokeniser
         self.tokenizer = RobertaTokenizer.from_pretrained(
@@ -319,7 +321,7 @@ class JPQRetrieve(TransformerBase) :
 
         self.faiss_path = os.path.join(self.index_path, faiss_name)
         #load the index
-        self.index = load_index(self.faiss_path, use_cuda=gpu, faiss_gpu_index=0)
+        self.index = load_index(self.faiss_path, use_cuda=gpu_search, faiss_gpu_index=0)
         self.max_query_length = max_query_length
 
         pid2offset_path = os.path.join(
@@ -349,7 +351,7 @@ class JPQRetrieve(TransformerBase) :
         opq_index = self.index
         # starting code assumes its a CPU index
         if "GpuIndex" in repr(faiss.downcast_index(opq_index.index)):
-            opq_index = faiss.index_gpu_to_cpu(opq_index)
+            self.index = opq_index = faiss.index_gpu_to_cpu(opq_index)
         vt = faiss.downcast_VectorTransform(opq_index.chain.at(0))            
         assert isinstance(vt, faiss.LinearTransform)
         opq_transform = faiss.vector_to_array(vt.A).reshape(vt.d_out, vt.d_in)
