@@ -212,9 +212,11 @@ class JPQIndexer(TransformerBase):
                 
                 token_ids_array[idx, :] = token_ids
                 token_length_array.append(length) 
-                pid2offset[p_id] = idx
+                #pid2offset[p_id] = idx
                 idx += 1
                 out_line_count += 1
+        
+        pid2offset = {x : x for x in range(idx)}
         assert len(token_length_array) == len(token_ids_array) == idx
         np.save(os.path.join(out_passage_path, "passages_length.npy"), np.array(token_length_array))
         token_ids_array = None
@@ -248,7 +250,7 @@ class JPQIndexer(TransformerBase):
         from jpq.run_init import doc_inference
         doc_inference(model, args, embed_size)
 
-        save_index_path =  f"OPQ{args.subvector_num},IVF1,PQ{args.subvector_num}x8.index" 
+        save_index_path = f"OPQ{args.subvector_num},IVF1,PQ{args.subvector_num}x8.index" 
 
         doc_embeddings = np.memmap(args.doc_embed_path, dtype=np.float32, mode="r")
         doc_embeddings = doc_embeddings.reshape(-1, embed_size)
@@ -345,6 +347,9 @@ class JPQRetrieve(TransformerBase) :
         args.model_device = torch.cuda.device(0) if self.gpu else torch.device("cpu")
 
         opq_index = self.index
+        # starting code assumes its a CPU index
+        if "GpuIndex" in repr(faiss.downcast_index(opq_index.index)):
+            opq_index = faiss.index_gpu_to_cpu(opq_index)
         vt = faiss.downcast_VectorTransform(opq_index.chain.at(0))            
         assert isinstance(vt, faiss.LinearTransform)
         opq_transform = faiss.vector_to_array(vt.A).reshape(vt.d_out, vt.d_in)
