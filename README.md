@@ -29,11 +29,22 @@ res = ret.search("chemical")
 ret.fit(train_topics, train_qrels)
 ```
 
+## Example Notebooks
+
+1. Using PyTerrier-JPQ on MSMARCO passage corpus, using the existing index provided by Zhan et al. 
+
+[[Github](examples/pyt_jpq_msmarco_passage_existing_index.ipynb)] [[Colab](https://colab.research.google.com/github/cmacdonald/pyt_jpq/blob/main/examples/pyt_jpq_msmarco_passage_existing_index.ipynb)] - demonstrates dense retrieval in PyTerrier using existing JPQ index. Effectiveness figures are shown below, which match very closely with the JPQ paper.
+
+|  name  | RR(rel=2) | nDCG@10  | nDCG@100 | AP(rel=2) | R@100   |
+|--------|-----------|----------|----------|-----------|---------|
+|	JPQ  | 0.833527  | 0.680037 | 0.586696 | 0.373038  |0.466696 |
+
+
 ## Known Issues
 
  - easier access, i.e. automatic downloading of existing model checkpoints
  - better use of folders in the index_path
-
+ - use of query encoders vs. dual encoders
 
 ## Citations
  - [Zhan2021] Jointly Optimizing Query Encoder and Product Quantization to Improve Retrieval Performance. Jingtao Zhan, Jiaxin Mao, Yiqun Liu, Jiafeng Guo, Min Zhang, Shaoping Ma. In Proceedings of CIKM 2021. https://arxiv.org/abs/2108.00644
