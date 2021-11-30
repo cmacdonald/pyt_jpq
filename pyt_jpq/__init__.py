@@ -5,6 +5,7 @@ import pyterrier as pt
 import pandas as pd
 assert pt.started()
 from typing import Union
+from warnings import warn
 from pyterrier.datasets import Dataset
 
 from pyterrier.transformer import TransformerBase
@@ -316,13 +317,19 @@ class JPQRetrieve(TransformerBase) :
         self.tokenizer = RobertaTokenizer.from_pretrained(
             "roberta-base", do_lower_case = True, cache_dir=None)
 
-        with open(os.path.join(self.index_path, "passages_meta"), 'rt') as metafile:
-            self.meta = json.load(metafile)
+        meta_file = os.path.join(self.index_path, "passages_meta")
+        if os.path.exists(meta_file)
+            with open(meta_file, 'rt') as metafile:
+                self.meta = json.load(metafile)
+        else:
+            self.meta={}
+            warn("No passages_meta present, params assumed from constructor args")
+
         if faiss_name is None:
             faiss_name = self.meta['current_faiss_index']
 
         self.faiss_path = os.path.join(self.index_path, faiss_name)
-        #load the index
+        # load the FAISS index
         self.index = load_index(self.faiss_path, use_cuda=gpu_search, faiss_gpu_index=0)
         self.max_query_length = max_query_length
 
@@ -336,10 +343,20 @@ class JPQRetrieve(TransformerBase) :
             "docno2docid.pickle",
         )
 
-        with open(pid2offset_path, 'rb') as handle:
-            self.pid2offset = pickle.load(handle)
-        with open(docno2docid_path, 'rb') as handle:
-            self.docno2docid = pickle.load(handle)
+        if os.path.exists(pid2offset_path):
+            with open(pid2offset_path, 'rb') as handle:
+                self.pid2offset = pickle.load(handle)
+        else:
+            warn("No pid2offset present, training not possible")
+
+        if os.path.exists(docno2docid_path):
+            with open(docno2docid_path, 'rb') as handle:
+                self.docno2docid = pickle.load(handle)
+        else:
+            num_docs = self.index.ntotal
+            self.docno2docid = {str(d) : d for d in range(num_docs)}
+            warn("No docno2docid present, assuming str(docid) == docno")
+        
         self.docid2docno = [None] * len(self.docno2docid)
         for docno, docid in self.docno2docid.items():
             self.docid2docno[docid] = docno
