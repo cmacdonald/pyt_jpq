@@ -318,7 +318,7 @@ class JPQRetrieve(TransformerBase) :
             "roberta-base", do_lower_case = True, cache_dir=None)
 
         meta_file = os.path.join(self.index_path, "passages_meta")
-        if os.path.exists(meta_file)
+        if os.path.exists(meta_file):
             with open(meta_file, 'rt') as metafile:
                 self.meta = json.load(metafile)
         else:
