@@ -30,6 +30,15 @@ DEFAULT_TRAINING_ARGS = {
     'train_batch_size' : 32
 }
 
+def _QueryPreprocessingFn(query, tokenizer, max_query_length):   
+    passage = tokenizer.encode(
+        query.rstrip(),
+        add_special_tokens=True,
+        max_length=max_query_length,
+        truncation=True)
+    passage_len = min(len(passage), max_query_length)
+    return passage, passage_len
+
 def _preprocess_topicsqrels(topics, qrels, docno2docid, pid2offset, max_query_length=32):
     import tempfile, os
     from collections import defaultdict
@@ -72,6 +81,82 @@ def _preprocess_topicsqrels(topics, qrels, docno2docid, pid2offset, max_query_le
         "train-query", "train-qrel.tsv") # run_train requires names like this
     return train_preprocess_dir
 
+
+class JPQTextScorer(TransformerBase):
+
+    def __init__(self, passage_encoder, query_encoder, tokenizer, text_attr="text", verbose=False):
+        self.passage_model = passage_encoder
+        self.query_model = query_encoder
+        self.max_query_length = 32
+        self.max_passage_length = 512
+        self.tokenizer = tokenizer
+        self.text_attr = text_attr
+        self.verbose = verbose
+
+    @staticmethod
+    def from_single_model(checkpoint_path, text_attr="text", gpu=True, verbose=False): #-> JPQTextScorer:
+        from jpq.model import RobertaDot
+        from transformers import RobertaConfig
+        from jpq.star_tokenizer import RobertaTokenizer
+        config_class, model_class = RobertaConfig, RobertaDot
+        config = config_class.from_pretrained(checkpoint_path)
+        model = model_class.from_pretrained(checkpoint_path, config=config,)
+        if gpu:
+            model = model.to(torch.device("cuda:0"))
+        #load the tokeniser
+        tokenizer = RobertaTokenizer.from_pretrained(
+            "roberta-base", do_lower_case = True, cache_dir=None)
+        return JPQTextScorer(model, model, tokenizer, verbose=verbose)
+
+    @staticmethod
+    def from_dual_models(passage_checkpoint_path, query_checkpoint_path, text_attr="text", gpu=True, verbose=False): # -> JPQTextScorer:
+        from jpq.model import RobertaDot
+        from transformers import RobertaConfig
+        from jpq.star_tokenizer import RobertaTokenizer
+        config_class, model_class = RobertaConfig, RobertaDot
+        configP = config_class.from_pretrained(passage_checkpoint_path)
+        modelP = model_class.from_pretrained(passage_checkpoint_path, config=configP,)
+        configQ = config_class.from_pretrained(query_checkpoint_path)
+        modelQ = model_class.from_pretrained(query_checkpoint_path, config=configQ,)
+
+        if gpu:
+            modelP = modelP.to(torch.device("cuda:0"))
+            modelQ = modelQ.to(torch.device("cuda:0"))
+        #load the tokeniser
+        tokenizer = RobertaTokenizer.from_pretrained(
+            "roberta-base", do_lower_case = True, cache_dir=None)
+        return JPQTextScorer(modelP, modelQ, tokenizer, verbose=verbose)
+
+
+    def transform(self, topics_and_docs : pd.DataFrame) -> pd.DataFrame:
+        model_device = self.query_model.device
+        import numpy as np
+        scores = np.zeros(len(topics_and_docs))
+        rowiter = enumerate(topics_and_docs.itertuples())
+        rowiter = pt.tqdm(rowiter, total=len(topics_and_docs), desc="JPQTextScorer") if self.verbose else rowiter
+        for i, row in rowiter: 
+            qids, qlength = _QueryPreprocessingFn(row.query, self.tokenizer, max_query_length=self.max_query_length )
+            pids, plength = _QueryPreprocessingFn(getattr(row, self.text_attr), self.tokenizer, max_query_length=self.max_passage_length )
+            
+
+            # apply the preprocessing. - see https://github.com/jingtaozhan/JPQ/blob/main/preprocess.py#L355
+            with torch.no_grad():
+                #get the query_embeds
+                qa = torch.tensor([qids]).to(model_device)
+                qb = torch.ones(1,len(qids)).to(model_device)
+                query_embeds = self.query_model(
+                    input_ids=qa, 
+                    attention_mask=qb, 
+                    )
+                pa = torch.tensor([pids]).to(model_device)
+                pb = torch.ones(1,len(pids)).to(model_device)
+                passage_embeds = self.passage_model(
+                    input_ids=pa, 
+                    attention_mask=pb, 
+                    )
+                scores[i] = torch.dot(query_embeds[0], passage_embeds[0]).detach().cpu().numpy()
+        topics_and_docs["score"] = scores
+        return topics_and_docs
 
 class JPQIndexer(TransformerBase):
     
@@ -462,20 +547,11 @@ class JPQRetrieve(TransformerBase) :
         input columns: qid, query
         output columns: qid, docid, docno, score, rank
         """
-        def QueryPreprocessingFn(query, tokenizer, max_query_length):   
-            passage = tokenizer.encode(
-                query.rstrip(),
-                add_special_tokens=True,
-                max_length=max_query_length,
-                truncation=True)
-            passage_len = min(len(passage), max_query_length)
-            # input_id_b = pad_input_ids(passage, max_query_length)
-            return passage, passage_len
 
         model_device = torch.device("cuda:0") if self.gpu else torch.device("cpu")
         rtr = []
         for row in topics.itertuples(): 
-            ids, length = QueryPreprocessingFn(row.query, self.tokenizer, max_query_length=self.max_query_length )
+            ids, length = _QueryPreprocessingFn(row.query, self.tokenizer, max_query_length=self.max_query_length )
 
             # apply the preprocessing. - see https://github.com/jingtaozhan/JPQ/blob/main/preprocess.py#L355
             with torch.no_grad():
